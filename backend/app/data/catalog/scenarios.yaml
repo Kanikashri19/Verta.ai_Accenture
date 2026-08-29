@@ -1,0 +1,129 @@
+version: "2.0"
+scenarios:
+  SCENARIO_1_MULTI_FACTOR:
+    id: "SCENARIO_1_MULTI_FACTOR"
+    name: "Main Demo: Multi-Factor Revenue Decline"
+    description: "Material drop in Gross Revenue (-18.5%) with multiple interconnected root causes across Conversion, Product Mix, Region, and Marketing."
+    target_kpi: "kpi_revenue"
+    time_window:
+      baseline_start: "2026-06-01"
+      baseline_end: "2026-08-21"
+      anomaly_start: "2026-08-22"
+      anomaly_end: "2026-08-28"
+    expected_confidence_tier: "HIGH"
+    expected_abstention: false
+    # GROUND TRUTH (FOR TEST VERIFICATION ONLY - NOT EXPOSED TO ANALYTICAL ENGINE)
+    ground_truth:
+      total_revenue_impact_pct: -18.5
+      root_causes:
+        - cause_id: "CAUSE_CONV_GATEWAY_TIMEOUT_EU"
+          driver: "Conversion Rate decline"
+          dimension: "region == 'EU'"
+          mechanism: "EU Adyen payment gateway timeout causing 38% checkout abandonment"
+          relative_impact_pct: -8.2
+          supporting_evidence_count: 45
+        - cause_id: "CAUSE_MIX_SHIFT_LAPTOP_STOCKOUT_NA"
+          driver: "Product Mix Shift & Availability"
+          dimension: "category == 'Electronics' & product_id == 'PROD_LAPTOP_01' & region == 'NA'"
+          mechanism: "Stockout of flagship $1,299 UltraBook Pro forcing buyers to low-margin accessories"
+          relative_impact_pct: -5.1
+          supporting_evidence_count: 12
+        - cause_id: "CAUSE_MARKETING_CHANNEL_SHIFT"
+          driver: "Traffic / Session decline"
+          dimension: "channel == 'Search' vs 'Social'"
+          mechanism: "Budget cut to high-converting Search Ads shifted to low-converting Social test"
+          relative_impact_pct: -3.8
+          supporting_evidence_count: 5
+        - cause_id: "CAUSE_ORGANIC_NOISE"
+          driver: "Residual Baseline Variance"
+          dimension: "global"
+          mechanism: "Normal stochastic daily variation"
+          relative_impact_pct: -1.4
+          supporting_evidence_count: 0
+
+  SCENARIO_2_HIGH_CONFIDENCE:
+    id: "SCENARIO_2_HIGH_CONFIDENCE"
+    name: "High Confidence: Single-Channel Campaign Outage"
+    description: "Sudden order drop driven entirely by accidental pause of primary Google Search marketing campaign."
+    target_kpi: "kpi_orders"
+    time_window:
+      baseline_start: "2026-06-01"
+      baseline_end: "2026-08-21"
+      anomaly_start: "2026-08-22"
+      anomaly_end: "2026-08-28"
+    expected_confidence_tier: "HIGH"
+    expected_abstention: false
+    ground_truth:
+      total_revenue_impact_pct: -14.2
+      root_causes:
+        - cause_id: "CAUSE_SEARCH_ADS_PAUSE"
+          driver: "Marketing Sessions & Orders"
+          dimension: "channel == 'Search'"
+          mechanism: "Campaign paused during automated budget audit"
+          relative_impact_pct: -14.2
+          supporting_evidence_count: 8
+
+  SCENARIO_3_LOW_CONFIDENCE:
+    id: "SCENARIO_3_LOW_CONFIDENCE"
+    name: "Low Confidence: Inconclusive AOV Drift (Abstention)"
+    description: "Minor AOV movement (-3.2%) with high daily variance and zero corroborating customer or operational tickets."
+    target_kpi: "kpi_aov"
+    time_window:
+      baseline_start: "2026-06-01"
+      baseline_end: "2026-08-21"
+      anomaly_start: "2026-08-22"
+      anomaly_end: "2026-08-28"
+    expected_confidence_tier: "LOW"
+    expected_abstention: true
+    ground_truth:
+      total_revenue_impact_pct: -3.2
+      root_causes:
+        - cause_id: "CAUSE_RANDOM_NOISE"
+          driver: "Inconclusive random noise"
+          dimension: "global"
+          mechanism: "Normal fluctuation below statistical significance"
+          relative_impact_pct: -3.2
+          supporting_evidence_count: 0
+
+  SCENARIO_4_SPARSE_HISTORY:
+    id: "SCENARIO_4_SPARSE_HISTORY"
+    name: "Sparse History: Newly Launched Product (Cold-Start)"
+    description: "New subscription product launched only 5 days ago; baseline observations are insufficient (<30 days)."
+    target_kpi: "kpi_revenue"
+    time_window:
+      baseline_start: "2026-08-24"
+      baseline_end: "2026-08-28"
+      anomaly_start: "2026-08-28"
+      anomaly_end: "2026-08-28"
+    expected_confidence_tier: "LOW"
+    expected_abstention: true
+    ground_truth:
+      days_of_history: 5
+      min_required_history: 30
+      mechanism: "Cold-start prevention prevents hallucinated anomaly detection"
+
+  SCENARIO_5_CONTRADICTORY_EVIDENCE:
+    id: "SCENARIO_5_CONTRADICTORY_EVIDENCE"
+    name: "Contradictory Evidence: Conflicting Gross Margin Drivers"
+    description: "Gross margin drops -6.5%. Structured data points to price discounts, whereas operations logs claim carrier fuel surcharges."
+    target_kpi: "kpi_gross_margin"
+    time_window:
+      baseline_start: "2026-06-01"
+      baseline_end: "2026-08-21"
+      anomaly_start: "2026-08-22"
+      anomaly_end: "2026-08-28"
+    expected_confidence_tier: "MEDIUM"
+    expected_abstention: false
+    ground_truth:
+      total_revenue_impact_pct: -6.5
+      root_causes:
+        - cause_id: "CAUSE_DISCOUNT_SPIKE_STRUCTURED"
+          driver: "Promotional discount spike (+12%)"
+          dimension: "category == 'Apparel'"
+          mechanism: "Unapproved coupon code circulating on social media"
+          supporting_evidence_count: 4
+        - cause_id: "CAUSE_CARRIER_SURCHARGE_OPS"
+          driver: "COGS Logistics Surcharge"
+          dimension: "region == 'EU'"
+          mechanism: "Carrier fuel surcharge applied to international freight"
+          contradictory_evidence_count: 4

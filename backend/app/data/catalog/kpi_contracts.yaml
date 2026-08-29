@@ -1,0 +1,226 @@
+version: "2.0"
+kpis:
+  kpi_revenue:
+    id: "kpi_revenue"
+    name: "Gross Revenue"
+    display_name: "Gross Revenue"
+    description: "Total recognized monetary value from sales transactions after product discounts."
+    unit: "USD"
+    aggregation: "SUM"
+    grain: "transaction/product/day"
+    refresh_cadence: "daily"
+    owner: "VP of E-Commerce & Commercial Finance"
+    access_restrictions:
+      roles: ["EXECUTIVE", "ANALYST"]
+      sensitivity: "INTERNAL_BUSINESS"
+    formula:
+      type: "sql_expression"
+      expression: "SUM(revenue - discount)"
+      description: "Sum of line item revenue minus discounts"
+    dimensions:
+      - "product_id"
+      - "category"
+      - "region"
+      - "date"
+    materiality_threshold:
+      relative_delta_pct: 5.0
+      z_score: 2.0
+      direction: "two_sided"
+    driver_hierarchy:
+      type: "multiplicative"
+      formula: "Sessions * Conversion_Rate * Average_Order_Value"
+      drivers:
+        - kpi_id: "kpi_sessions"
+          weight: 0.33
+        - kpi_id: "kpi_conv_rate"
+          weight: 0.33
+        - kpi_id: "kpi_aov"
+          weight: 0.34
+      dimensional_breakdowns:
+        - "region"
+        - "category"
+    lineage:
+      upstream_sources:
+        - source_id: "src_sales_transactions"
+          fields: ["revenue", "discount", "date", "region", "category"]
+      downstream_kpis:
+        - "kpi_aov"
+        - "kpi_gross_margin"
+
+  kpi_orders:
+    id: "kpi_orders"
+    name: "Total Orders"
+    display_name: "Completed Orders"
+    description: "Count of distinct completed purchase orders across all channels."
+    unit: "count"
+    aggregation: "COUNT_DISTINCT"
+    grain: "transaction/product/day"
+    refresh_cadence: "daily"
+    owner: "Head of Online Sales"
+    access_restrictions:
+      roles: ["EXECUTIVE", "ANALYST"]
+      sensitivity: "INTERNAL_BUSINESS"
+    formula:
+      type: "sql_expression"
+      expression: "COUNT(DISTINCT order_id)"
+      description: "Count of distinct purchase order identifiers"
+    dimensions:
+      - "region"
+      - "category"
+      - "date"
+    materiality_threshold:
+      relative_delta_pct: 5.0
+      z_score: 2.0
+      direction: "two_sided"
+    driver_hierarchy:
+      type: "multiplicative"
+      formula: "Sessions * Conversion_Rate"
+      drivers:
+        - kpi_id: "kpi_sessions"
+          weight: 0.50
+        - kpi_id: "kpi_conv_rate"
+          weight: 0.50
+      dimensional_breakdowns:
+        - "region"
+        - "category"
+    lineage:
+      upstream_sources:
+        - source_id: "src_sales_transactions"
+          fields: ["order_id", "date", "region"]
+      downstream_kpis:
+        - "kpi_revenue"
+        - "kpi_aov"
+        - "kpi_conv_rate"
+
+  kpi_aov:
+    id: "kpi_aov"
+    name: "Average Order Value"
+    display_name: "Average Order Value (AOV)"
+    description: "Average net spend per completed customer transaction."
+    unit: "USD"
+    aggregation: "RATIO"
+    grain: "transaction/product/day"
+    refresh_cadence: "daily"
+    owner: "Lead Merchandiser & Pricing Director"
+    access_restrictions:
+      roles: ["EXECUTIVE", "ANALYST"]
+      sensitivity: "INTERNAL_BUSINESS"
+    formula:
+      type: "ratio"
+      numerator_kpi: "kpi_revenue"
+      denominator_kpi: "kpi_orders"
+      expression: "kpi_revenue / kpi_orders"
+      description: "Total Revenue divided by Total Orders"
+    dimensions:
+      - "region"
+      - "category"
+      - "date"
+    materiality_threshold:
+      relative_delta_pct: 4.0
+      z_score: 2.0
+      direction: "two_sided"
+    driver_hierarchy:
+      type: "additive_ratio"
+      drivers:
+        - kpi_id: "kpi_revenue"
+          weight: 0.50
+        - kpi_id: "kpi_orders"
+          weight: -0.50
+      dimensional_breakdowns:
+        - "category"
+        - "region"
+    lineage:
+      upstream_sources:
+        - source_id: "src_sales_transactions"
+          fields: ["revenue", "discount", "order_id"]
+      downstream_kpis:
+        - "kpi_revenue"
+
+  kpi_conv_rate:
+    id: "kpi_conv_rate"
+    name: "Conversion Rate"
+    display_name: "E-Commerce Conversion Rate"
+    description: "Percentage of visitor clicks/sessions that result in a completed order."
+    unit: "percentage"
+    aggregation: "RATIO"
+    grain: "campaign/day"
+    refresh_cadence: "hourly"
+    owner: "Head of Growth Marketing & UX"
+    access_restrictions:
+      roles: ["EXECUTIVE", "ANALYST"]
+      sensitivity: "INTERNAL_BUSINESS"
+    formula:
+      type: "ratio"
+      numerator: "SUM(conversions)"
+      denominator: "SUM(clicks)"
+      expression: "SUM(conversions) / SUM(clicks)"
+      description: "Total Conversions divided by Total Traffic Clicks"
+    dimensions:
+      - "channel"
+      - "region"
+      - "date"
+    materiality_threshold:
+      relative_delta_pct: 6.0
+      z_score: 2.0
+      direction: "two_sided"
+    driver_hierarchy:
+      type: "ratio_drivers"
+      drivers:
+        - component: "checkout_completion_rate"
+          weight: 0.60
+        - component: "traffic_quality_by_channel"
+          weight: 0.40
+      dimensional_breakdowns:
+        - "channel"
+        - "region"
+    lineage:
+      upstream_sources:
+        - source_id: "src_marketing_campaigns"
+          fields: ["clicks", "conversions", "channel", "region"]
+        - source_id: "src_sales_transactions"
+          fields: ["order_id"]
+      downstream_kpis:
+        - "kpi_orders"
+        - "kpi_revenue"
+
+  kpi_gross_margin:
+    id: "kpi_gross_margin"
+    name: "Gross Margin"
+    display_name: "Gross Profit Margin %"
+    description: "Net revenue remaining after Cost of Goods Sold (COGS), expressed as a percentage."
+    unit: "percentage"
+    aggregation: "RATIO"
+    grain: "transaction/product/day"
+    refresh_cadence: "daily"
+    owner: "Chief Financial Officer & Finance Team"
+    access_restrictions:
+      roles: ["EXECUTIVE", "ANALYST"]
+      sensitivity: "CONFIDENTIAL_FINANCIAL"
+    formula:
+      type: "ratio"
+      expression: "SUM(revenue - discount - cost) / SUM(revenue - discount)"
+      description: "(Net Revenue - Cost) / Net Revenue"
+    dimensions:
+      - "category"
+      - "region"
+      - "date"
+    materiality_threshold:
+      relative_delta_pct: 3.0
+      z_score: 2.0
+      direction: "two_sided"
+    driver_hierarchy:
+      type: "additive_components"
+      drivers:
+        - component: "discount_rate_variance"
+          weight: 0.50
+        - component: "cost_of_goods_variance"
+          weight: 0.50
+      dimensional_breakdowns:
+        - "category"
+        - "region"
+    lineage:
+      upstream_sources:
+        - source_id: "src_sales_transactions"
+          fields: ["revenue", "discount", "cost", "category"]
+      downstream_kpis:
+        - "kpi_ebitda"

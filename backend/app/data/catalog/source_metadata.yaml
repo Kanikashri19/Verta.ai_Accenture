@@ -1,0 +1,160 @@
+version: "2.0"
+sources:
+  src_sales_transactions:
+    source_id: "src_sales_transactions"
+    source_name: "NovaMart Point-of-Sale & Web Transactions"
+    owner: "Sales Operations & Commercial Finance"
+    grain: "transaction/product/day"
+    refresh_cadence: "daily"
+    freshness_sla_minutes: 1440 # 24 hours
+    last_refresh: "2026-08-29T00:00:00Z"
+    historical_start: "2026-06-01"
+    data_quality_score: 0.98
+    sensitivity_level: "INTERNAL_COMMERCIAL"
+    storage_table: "sales_transactions"
+    lineage:
+      upstream_systems: ["NovaMart Checkout Gateway", "Shopify POS Integration"]
+      downstream_kpis: ["kpi_revenue", "kpi_orders", "kpi_aov", "kpi_gross_margin"]
+    schema_fields:
+      - name: "date"
+        type: "DATE"
+        description: "Transaction execution date (YYYY-MM-DD)"
+        nullable: false
+      - name: "order_id"
+        type: "VARCHAR(36)"
+        description: "Unique order identifier"
+        nullable: false
+      - name: "product_id"
+        type: "VARCHAR(20)"
+        description: "SKU identifier"
+        nullable: false
+      - name: "category"
+        type: "VARCHAR(50)"
+        description: "Product category (Electronics, Apparel, Home & Kitchen, Beauty)"
+        nullable: false
+      - name: "region"
+        type: "VARCHAR(10)"
+        description: "Sales region (NA, EU, APAC)"
+        nullable: false
+      - name: "quantity"
+        type: "INTEGER"
+        description: "Units purchased in line item"
+        nullable: false
+      - name: "revenue"
+        type: "DECIMAL(10,2)"
+        description: "Gross revenue before discounts (quantity * unit_price)"
+        nullable: false
+      - name: "discount"
+        type: "DECIMAL(10,2)"
+        description: "Promotional discount applied"
+        nullable: false
+      - name: "cost"
+        type: "DECIMAL(10,2)"
+        description: "Total cost of goods sold for line item"
+        nullable: false
+
+  src_marketing_campaigns:
+    source_id: "src_marketing_campaigns"
+    source_name: "NovaMart Omnichannel Marketing Spend & Traffic"
+    owner: "Growth Marketing & UA Analytics"
+    grain: "campaign/day"
+    refresh_cadence: "hourly"
+    freshness_sla_minutes: 60 # 1 hour
+    last_refresh: "2026-08-29T16:00:00Z"
+    historical_start: "2026-06-01"
+    data_quality_score: 0.95
+    sensitivity_level: "INTERNAL_BUSINESS"
+    storage_table: "marketing_campaigns"
+    lineage:
+      upstream_systems: ["Google Ads API", "Meta Ads Manager", "TikTok Marketing API", "Klaviyo Email"]
+      downstream_kpis: ["kpi_conv_rate"]
+    schema_fields:
+      - name: "date"
+        type: "DATE"
+        description: "Reporting date (YYYY-MM-DD)"
+        nullable: false
+      - name: "campaign_id"
+        type: "VARCHAR(30)"
+        description: "Unique campaign identifier"
+        nullable: false
+      - name: "channel"
+        type: "VARCHAR(30)"
+        description: "Marketing channel (Search, Social, Influencer, Email)"
+        nullable: false
+      - name: "region"
+        type: "VARCHAR(10)"
+        description: "Geographic targeting region (NA, EU, APAC)"
+        nullable: false
+      - name: "spend"
+        type: "DECIMAL(10,2)"
+        description: "Advertising spend in USD"
+        nullable: false
+      - name: "impressions"
+        type: "INTEGER"
+        description: "Ad impressions delivered"
+        nullable: false
+      - name: "clicks"
+        type: "INTEGER"
+        description: "Inbound visitor clicks"
+        nullable: false
+      - name: "conversions"
+        type: "INTEGER"
+        description: "Completed orders attributed to campaign"
+        nullable: false
+
+  src_customer_operations:
+    source_id: "src_customer_operations"
+    source_name: "NovaMart Support Tickets, Reviews & Ops Incident Notes"
+    owner: "Customer Experience (CX) & Site Reliability Engineering (SRE)"
+    grain: "individual event/ticket/review"
+    refresh_cadence: "near-real-time"
+    freshness_sla_minutes: 5 # 5 minutes
+    last_refresh: "2026-08-29T17:20:00Z"
+    historical_start: "2026-06-01"
+    data_quality_score: 0.92
+    sensitivity_level: "RESTRICTED_PII_AND_OPS"
+    storage_table: "customer_operations_events"
+    lineage:
+      upstream_systems: ["Zendesk Support", "Trustpilot Reviews", "PagerDuty / Datadog Logs"]
+      downstream_kpis: ["Evidence / RAG Layer for Anomaly Correlation"]
+    schema_fields:
+      - name: "timestamp"
+        type: "TIMESTAMP"
+        description: "Event generation timestamp in ISO-8601"
+        nullable: false
+      - name: "source"
+        type: "VARCHAR(20)"
+        description: "Event source (SUPPORT_TICKET, CUSTOMER_REVIEW, OPS_INCIDENT)"
+        nullable: false
+      - name: "region"
+        type: "VARCHAR(10)"
+        description: "Geographic region (NA, EU, APAC)"
+        nullable: false
+      - name: "product_id"
+        type: "VARCHAR(20)"
+        description: "Target SKU (nullable for platform-wide issues)"
+        nullable: true
+      - name: "category"
+        type: "VARCHAR(50)"
+        description: "Category affected (Electronics, Apparel, Checkout, Logistics)"
+        nullable: false
+      - name: "sentiment"
+        type: "FLOAT"
+        description: "Sentiment score (-1.0 to +1.0)"
+        nullable: false
+      - name: "text"
+        type: "TEXT"
+        description: "Unstructured description or ticket body"
+        nullable: false
+      - name: "issue_type"
+        type: "VARCHAR(50)"
+        description: "Classified issue type (PAYMENT_GATEWAY_TIMEOUT, STOCKOUT, SHIPPING_DELAY, PRICING_ERROR)"
+        nullable: false
+      - name: "severity"
+        type: "VARCHAR(10)"
+        description: "Event severity (CRITICAL, HIGH, MEDIUM, LOW)"
+        nullable: false
+      - name: "sensitivity"
+        type: "VARCHAR(20)"
+        description: "Data sensitivity tier (PII_RESTRICTED, INTERNAL_OPS, PUBLIC_FEEDBACK)"
+        nullable: false
