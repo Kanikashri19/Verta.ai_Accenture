@@ -8,6 +8,7 @@ class DecompositionEngine:
     """
     Deterministic Mathematical Decomposition Engine.
     Executes exact multiplicative, mix-shift, and dimensional attributions with zero residual error.
+    Enforces strictly non-causal association language.
     """
 
     @staticmethod
@@ -24,7 +25,6 @@ class DecompositionEngine:
         Using Bennet/Montgomery mid-point chain attribution:
         Sum of contributions strictly equals the observed total Revenue Delta.
         """
-        # Daily normalized quantities
         b_days = baseline_sales["date"].nunique() or 1
         a_days = anomaly_sales["date"].nunique() or 1
 
@@ -47,7 +47,6 @@ class DecompositionEngine:
         b_aov = (b_rev / b_orders) if b_orders > 0 else 0.0
         a_aov = (a_rev / a_orders) if a_orders > 0 else 0.0
 
-        # Mid-point values for exact closed-form attribution
         m_clicks = (b_clicks + a_clicks) / 2.0
         m_cr = (b_cr + a_cr) / 2.0
         m_aov = (b_aov + a_aov) / 2.0
@@ -56,14 +55,10 @@ class DecompositionEngine:
         delta_cr = a_cr - b_cr
         delta_aov = a_aov - b_aov
 
-        # 1. Traffic / Clicks Contribution ($/day)
         contrib_clicks = delta_clicks * m_cr * m_aov
-        # 2. Conversion Rate Contribution ($/day)
         contrib_cr = m_clicks * delta_cr * m_aov
-        # 3. AOV / Pricing & Mix Contribution ($/day)
         contrib_aov = m_clicks * m_cr * delta_aov
 
-        # Residual normalization to guarantee exact sum = delta_rev
         raw_sum = contrib_clicks + contrib_cr + contrib_aov
         if abs(raw_sum) > 1e-9 and abs(delta_rev) > 1e-9:
             scale = delta_rev / raw_sum
@@ -71,7 +66,6 @@ class DecompositionEngine:
             contrib_cr *= scale
             contrib_aov *= scale
 
-        # Scale to total anomaly period window (e.g. 7 days)
         total_delta_usd = delta_rev * a_days
         total_clicks_usd = contrib_clicks * a_days
         total_cr_usd = contrib_cr * a_days
@@ -80,7 +74,7 @@ class DecompositionEngine:
         drivers = [
             DriverContribution(
                 driver_name="Conversion Rate",
-                driver_type="MULTIPLICATIVE_COMPONENT",
+                driver_type="QUANTITATIVE_DRIVER",
                 contribution_value=round(total_cr_usd, 2),
                 contribution_percentage=round((total_cr_usd / total_delta_usd * 100.0) if total_delta_usd != 0 else 0.0, 1),
                 direction="NEGATIVE" if total_cr_usd < 0 else "POSITIVE",
@@ -92,7 +86,7 @@ class DecompositionEngine:
             ),
             DriverContribution(
                 driver_name="Average Order Value & Product Mix",
-                driver_type="MULTIPLICATIVE_COMPONENT",
+                driver_type="QUANTITATIVE_DRIVER",
                 contribution_value=round(total_aov_usd, 2),
                 contribution_percentage=round((total_aov_usd / total_delta_usd * 100.0) if total_delta_usd != 0 else 0.0, 1),
                 direction="NEGATIVE" if total_aov_usd < 0 else "POSITIVE",
@@ -104,7 +98,7 @@ class DecompositionEngine:
             ),
             DriverContribution(
                 driver_name="Traffic & Inbound Sessions",
-                driver_type="MULTIPLICATIVE_COMPONENT",
+                driver_type="QUANTITATIVE_DRIVER",
                 contribution_value=round(total_clicks_usd, 2),
                 contribution_percentage=round((total_clicks_usd / total_delta_usd * 100.0) if total_delta_usd != 0 else 0.0, 1),
                 direction="NEGATIVE" if total_clicks_usd < 0 else "POSITIVE",
@@ -116,24 +110,22 @@ class DecompositionEngine:
             ),
         ]
 
-        # Sort by absolute impact descending
-        drivers.sort(key=lambda d: abs(d.contribution_value), reverse=True)
+        drivers.sort(key=lambda d: abs(d.contribution_value or 0.0), reverse=True)
         return drivers
 
     @staticmethod
     def analyze_mix_shift(
         baseline_sales: pd.DataFrame,
         anomaly_sales: pd.DataFrame,
-        dimension: str = "category"
+        dimension: str = "product_id"
     ) -> MixShiftBreakdown:
         """
         Executes formal Volume / Mix / Price-Rate decomposition.
-        Separates unit volume decline from product mix substitution (e.g. buying cheaper goods).
+        Separates unit volume movement from product mix substitution.
         """
         b_days = baseline_sales["date"].nunique() or 1
         a_days = anomaly_sales["date"].nunique() or 1
 
-        # Aggregate daily baseline and anomaly by slice
         b_slice = baseline_sales.groupby(dimension).agg(
             units=("quantity", "sum"),
             net_revenue=("revenue", lambda r: (r - baseline_sales.loc[r.index, "discount"]).sum())
@@ -150,7 +142,6 @@ class DecompositionEngine:
         a_slice["daily_rev"] = a_slice["net_revenue"] / a_days
         a_slice["price"] = a_slice["daily_rev"] / a_slice["daily_units"]
 
-        # Align categories
         all_keys = list(set(b_slice.index).union(set(a_slice.index)))
         
         total_b_units = b_slice["daily_units"].sum()
@@ -178,18 +169,20 @@ class DecompositionEngine:
 
             p_avg = (p0 + p1) / 2.0 if (p0 > 0 and p1 > 0) else (p0 or p1)
 
-            # 1. Volume Effect: (Change in Total Units) * Baseline Share * Price
             vol_effect += (total_a_units - total_b_units) * s0 * p_avg
-            # 2. Mix Effect: Total Anomaly Units * (Change in Share) * Price
             mix_effect += total_a_units * (s1 - s0) * p_avg
-            # 3. Pure Price / Discount Effect: Anomaly Units * (Change in Price)
             rate_effect += u1 * (p1 - p0)
 
-        # Scale across anomaly period
         total_delta = (a_slice["daily_rev"].sum() - b_slice["daily_rev"].sum()) * a_days
         vol_usd = vol_effect * a_days
         mix_usd = mix_effect * a_days
         rate_usd = rate_effect * a_days
+
+        desc = (
+            f"Mix-shift analysis across '{dimension}': Overall movement is decomposed into "
+            f"Volume Effect (-${abs(vol_usd):,.2f}), Mix-Shift Effect (-${abs(mix_usd):,.2f}), "
+            f"and Price/Rate Effect (${rate_usd:+,.2f})."
+        )
 
         return MixShiftBreakdown(
             dimension_name=dimension,
@@ -199,6 +192,7 @@ class DecompositionEngine:
             total_delta_usd=round(total_delta, 2),
             shares_baseline=shares_b,
             shares_anomaly=shares_a,
+            description=desc,
         )
 
     @staticmethod
@@ -215,7 +209,6 @@ class DecompositionEngine:
         b_days = baseline_df["date"].nunique() or 1
         a_days = anomaly_df["date"].nunique() or 1
 
-        # Calculate net revenue if not present
         if metric_col == "net_revenue":
             b_df = baseline_df.copy()
             a_df = anomaly_df.copy()
@@ -254,7 +247,6 @@ class DecompositionEngine:
                 )
             )
 
-        # Sort by absolute change descending
         results.sort(key=lambda x: abs(x.absolute_change), reverse=True)
         return results
 

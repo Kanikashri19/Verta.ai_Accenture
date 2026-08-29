@@ -1,6 +1,8 @@
 import pytest
 import pandas as pd
 import numpy as np
+import re
+import json
 from typing import Dict, Any
 
 import sys
@@ -179,6 +181,43 @@ class TestAnalyticalEngine:
         for s in signals:
             assert s.signal_role == "SUPPORTING_SIGNAL"
             assert s.time_alignment is True
+
+    def test_ranked_explanations_distinctions(self):
+        """Test Phase 3 Patch: Ranked explanations cleanly separate quantitative drivers and supporting signals."""
+        res = investigation_engine.investigate_kpi("kpi_revenue", "SCENARIO_1_MULTI_FACTOR")
+        
+        assert len(res.ranked_explanations) > 0
+        
+        quant_drivers = [e for e in res.ranked_explanations if e.driver_type == "QUANTITATIVE_DRIVER"]
+        supporting_signals = [e for e in res.ranked_explanations if e.driver_type == "SUPPORTING_SIGNAL"]
+        
+        assert len(quant_drivers) >= 3
+        assert len(supporting_signals) >= 2
+        
+        # 1. Quantitative drivers must have non-null dollar and percentage contributions
+        for qd in quant_drivers:
+            assert qd.contribution_value is not None
+            assert qd.contribution_percentage is not None
+            assert qd.status == "VERIFIED_QUANTITATIVE"
+            
+        # 2. Supporting signals must NOT fabricate dollar or percentage contributions
+        for ss in supporting_signals:
+            assert ss.contribution_value is None, f"Supporting signal '{ss.driver}' must have contribution_value=None"
+            assert ss.contribution_percentage is None, f"Supporting signal '{ss.driver}' must have contribution_percentage=None"
+            assert ss.supporting_evidence_count > 0
+            assert ss.time_alignment is True
+
+    def test_causal_language_guardrails(self):
+        """Test Phase 3 Patch: No unsupported causal claims (caused by, due to, resulted from) in FactPack."""
+        res = investigation_engine.investigate_kpi("kpi_revenue", "SCENARIO_1_MULTI_FACTOR")
+        fact_pack = investigation_engine.generate_fact_pack(res)
+        
+        fp_json_str = json.dumps(fact_pack.model_dump()).lower()
+        
+        forbidden_patterns = [r"\bcaused by\b", r"\bdue to\b", r"\bresulted from\b"]
+        for pattern in forbidden_patterns:
+            matches = re.findall(pattern, fp_json_str)
+            assert len(matches) == 0, f"Found forbidden causal language matching '{pattern}' in FactPack: {matches}"
 
     def test_fact_pack_structure_and_guardrails(self):
         """Test 14: FactPack contains verified deterministic information and non-causal constraints."""

@@ -27,11 +27,11 @@ class MaterialityAssessment(BaseModel):
 
 class DriverContribution(BaseModel):
     driver_name: str
-    driver_type: str  # "MULTIPLICATIVE_COMPONENT" | "MIX_SHIFT" | "DIMENSIONAL_SUBSET"
+    driver_type: str = "QUANTITATIVE_DRIVER"  # "QUANTITATIVE_DRIVER" | "MULTIPLICATIVE_COMPONENT" | "MIX_SHIFT"
     dimension: Optional[str] = None
-    contribution_value: float
-    contribution_percentage: float
-    direction: str  # "NEGATIVE" | "POSITIVE" | "NEUTRAL"
+    contribution_value: Optional[float] = None
+    contribution_percentage: Optional[float] = None
+    direction: str = "NEGATIVE"  # "NEGATIVE" | "POSITIVE" | "NEUTRAL"
     association_type: str = "LIKELY_CONTRIBUTOR"  # Explicitly NOT "CAUSAL"
     methodology: str
     baseline_driver_value: float
@@ -47,6 +47,7 @@ class MixShiftBreakdown(BaseModel):
     methodology: str = "Logarithmic/Bennet Volume-Mix-Rate Exact Decomposition"
     shares_baseline: Dict[str, float]
     shares_anomaly: Dict[str, float]
+    description: str = ""
 
 class DimensionalContribution(BaseModel):
     dimension: str
@@ -68,9 +69,25 @@ class OperationalSignal(BaseModel):
     event_count: int
     severity: str
     avg_sentiment: float
-    time_alignment: bool
+    time_alignment: bool = True
     description: str
     signal_role: str = "SUPPORTING_SIGNAL"  # Explicit non-causal label
+
+class RankedExplanation(BaseModel):
+    rank: int
+    driver: str
+    driver_type: str  # "QUANTITATIVE_DRIVER" | "DIMENSIONAL_DRIVER" | "SUPPORTING_SIGNAL"
+    direction: str  # "NEGATIVE" | "POSITIVE" | "NEUTRAL"
+    contribution_value: Optional[float] = None  # None for supporting signals / non-quantified
+    contribution_percentage: Optional[float] = None  # None for supporting signals
+    signal_strength: Optional[str] = None  # "HIGH" | "MEDIUM" | "LOW" | None
+    supporting_evidence_count: int = 0
+    time_alignment: bool = True
+    affected_dimensions: Optional[Dict[str, str]] = None
+    confidence_component: str
+    method: str
+    status: str
+    description: str
 
 class DataFreshnessReport(BaseModel):
     source_id: str
@@ -96,6 +113,7 @@ class InvestigationResult(BaseModel):
     anomaly_score: Optional[float] = None
     analytical_method: str
     ranked_drivers: List[DriverContribution]
+    ranked_explanations: List[RankedExplanation] = Field(default_factory=list)
     mix_shift_analysis: Optional[MixShiftBreakdown] = None
     dimensional_drilldowns: Dict[str, List[DimensionalContribution]] = Field(default_factory=dict)
     supporting_signals: List[OperationalSignal] = Field(default_factory=list)

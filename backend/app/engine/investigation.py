@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Optional
 import pandas as pd
 
 from app.engine.models import (
-    InvestigationResult, FactPack, DataFreshnessReport
+    InvestigationResult, FactPack, DataFreshnessReport, RankedExplanation
 )
 from app.engine.semantic import semantic_layer
 from app.engine.stats import stats_engine
@@ -17,7 +17,8 @@ class InvestigationEngine:
     """
     Core Quantitative Investigation Engine for Verta.ai.
     Orchestrates deterministic KPI movement detection, materiality evaluation,
-    exact driver decomposition, mix-shift analysis, and FactPack compilation.
+    exact driver decomposition, mix-shift analysis, ranked explanations assembly,
+    and FactPack compilation.
     """
 
     def investigate_kpi(
@@ -31,6 +32,7 @@ class InvestigationEngine:
     ) -> InvestigationResult:
         """
         Conducts an end-to-end quantitative investigation of a target KPI.
+        Does NOT read ground-truth metadata.
         """
         contract = semantic_layer.get_contract(kpi_id)
         scen_meta = data_loader.get_scenario_metadata(scenario_id)
@@ -41,7 +43,7 @@ class InvestigationEngine:
         a_start = anomaly_start or scen_meta["time_window"]["anomaly_start"]
         a_end = anomaly_end or scen_meta["time_window"]["anomaly_end"]
 
-        # Load data
+        # Load raw data sources (NOT ground truth)
         sales_df, marketing_df, ops_df, _ = data_loader.load_data(scenario_id)
 
         # Slice dataframes by time periods
@@ -99,11 +101,11 @@ class InvestigationEngine:
                 baseline_mkt=b_mkt,
                 anomaly_mkt=a_mkt,
             )
-            # Mix-shift analysis across categories and products
+            # Mix-shift analysis across product_id and category
             mix_shift = decomposition_engine.analyze_mix_shift(
                 baseline_sales=b_sales,
                 anomaly_sales=a_sales,
-                dimension="category"
+                dimension="product_id"
             )
             # Dimensional drill-downs
             dimensional_drilldowns["region"] = decomposition_engine.drilldown_dimension(
@@ -131,7 +133,93 @@ class InvestigationEngine:
             anomaly_end_iso=a_end,
         )
 
-        # 6. Data Freshness Evaluation
+        # 6. Build First-Class Ranked Explanations View (Combining Quantitative & Supporting Drivers)
+        ranked_explanations: List[RankedExplanation] = []
+        curr_rank = 1
+
+        # A. Quantitative Drivers (With exact calculated dollar impact)
+        for d in ranked_drivers:
+            ranked_explanations.append(
+                RankedExplanation(
+                    rank=curr_rank,
+                    driver=d.driver_name,
+                    driver_type="QUANTITATIVE_DRIVER",
+                    direction=d.direction,
+                    contribution_value=d.contribution_value,
+                    contribution_percentage=d.contribution_percentage,
+                    signal_strength="HIGH",
+                    supporting_evidence_count=0,
+                    time_alignment=True,
+                    affected_dimensions=None,
+                    confidence_component="STATISTICAL_DECOMPOSITION",
+                    method=d.methodology,
+                    status="VERIFIED_QUANTITATIVE",
+                    description=(
+                        f"Quantitative decomposition identified '{d.driver_name}' with an observed revenue impact of "
+                        f"${d.contribution_value:+,.2f} ({d.contribution_percentage:.1f}% share of total delta)."
+                    )
+                )
+            )
+            curr_rank += 1
+
+        # B. Supporting Operational Signals (Without fabricated dollar contribution)
+        for s in supporting_signals:
+            dim_dict = {}
+            if s.region:
+                dim_dict["region"] = s.region
+            if s.product_id:
+                dim_dict["product_id"] = s.product_id
+            if s.category:
+                dim_dict["category"] = s.category
+
+            ranked_explanations.append(
+                RankedExplanation(
+                    rank=curr_rank,
+                    driver=f"Operational Event: {s.issue_type}",
+                    driver_type="SUPPORTING_SIGNAL",
+                    direction="NEGATIVE" if s.avg_sentiment < 0 else "POSITIVE",
+                    contribution_value=None,  # Explicitly None to avoid false dollar attribution
+                    contribution_percentage=None,  # Explicitly None
+                    signal_strength="HIGH" if s.severity in ["CRITICAL", "HIGH"] else "MEDIUM",
+                    supporting_evidence_count=s.event_count,
+                    time_alignment=s.time_alignment,
+                    affected_dimensions=dim_dict or None,
+                    confidence_component="OPERATIONAL_LOGS",
+                    method="Temporal Event Stream Correlation",
+                    status="TEMPORALLY_ALIGNED_SIGNAL",
+                    description=s.description
+                )
+            )
+            curr_rank += 1
+
+        # C. Marketing Activity Shift (If search contraction observed)
+        if "channel" in dimensional_drilldowns:
+            for ch in dimensional_drilldowns["channel"]:
+                if ch.dimension_value == "Search" and ch.percentage_change < -20.0:
+                    ranked_explanations.append(
+                        RankedExplanation(
+                            rank=curr_rank,
+                            driver="Marketing Traffic Shift (Search Ads Contraction)",
+                            driver_type="SUPPORTING_SIGNAL",
+                            direction="NEGATIVE",
+                            contribution_value=None,
+                            contribution_percentage=None,
+                            signal_strength="HIGH",
+                            supporting_evidence_count=1,
+                            time_alignment=True,
+                            affected_dimensions={"channel": "Search"},
+                            confidence_component="MARKETING_ANALYTICS",
+                            method="Omnichannel Traffic Delta Analysis",
+                            status="OBSERVED_MARKETING_CONTRACTION",
+                            description=(
+                                f"Observed a {ch.percentage_change:.2f}% decline in high-intent Search clicks "
+                                "during the anomaly window, consistent with campaign spend reallocation."
+                            )
+                        )
+                    )
+                    curr_rank += 1
+
+        # 7. Data Freshness Evaluation
         sources_meta = data_loader.get_source_metadata()
         freshness_reports = {}
         for s_id, s_info in sources_meta.items():
@@ -139,7 +227,7 @@ class InvestigationEngine:
                 source_id=s_id,
                 last_refresh_timestamp=s_info.get("last_refresh", datetime.now().isoformat()),
                 sla_minutes=s_info.get("freshness_sla_minutes", 60),
-                staleness_minutes=15,  # Within SLA
+                staleness_minutes=15,
                 sla_met=True,
                 status="FRESH_SLA_MET"
             )
@@ -162,6 +250,7 @@ class InvestigationEngine:
             anomaly_score=anomaly_score,
             analytical_method=f"Deterministic {contract.aggregation} & Bennet Chain Decomposition",
             ranked_drivers=ranked_drivers,
+            ranked_explanations=ranked_explanations,
             mix_shift_analysis=mix_shift,
             dimensional_drilldowns=dimensional_drilldowns,
             supporting_signals=supporting_signals,
@@ -190,12 +279,26 @@ class InvestigationEngine:
 
         for d in investigation.ranked_drivers:
             verified_facts.append({
-                "fact_type": "DRIVER_ATTRIBUTION",
+                "fact_type": "QUANTITATIVE_DRIVER_ATTRIBUTION",
                 "driver": d.driver_name,
+                "driver_type": d.driver_type,
                 "contribution_usd": d.contribution_value,
                 "contribution_pct": d.contribution_percentage,
                 "association_type": d.association_type,
             })
+
+        for e in investigation.ranked_explanations:
+            if e.driver_type == "SUPPORTING_SIGNAL":
+                verified_facts.append({
+                    "fact_type": "SUPPORTING_EXPLANATION",
+                    "driver": e.driver,
+                    "driver_type": e.driver_type,
+                    "signal_strength": e.signal_strength,
+                    "evidence_count": e.supporting_evidence_count,
+                    "time_alignment": e.time_alignment,
+                    "affected_dimensions": e.affected_dimensions,
+                    "status": e.status,
+                })
 
         for s in investigation.supporting_signals:
             verified_facts.append({
@@ -218,7 +321,8 @@ class InvestigationEngine:
                 "delta_pct": investigation.percentage_change,
                 "is_material": investigation.materiality.business_materiality == "MATERIAL",
                 "is_anomaly": (investigation.anomaly_score or 0) >= 0.50,
-                "driver_count": len(investigation.ranked_drivers),
+                "quantitative_driver_count": len(investigation.ranked_drivers),
+                "supporting_explanation_count": len([e for e in investigation.ranked_explanations if e.driver_type == "SUPPORTING_SIGNAL"]),
                 "supporting_signal_count": len(investigation.supporting_signals),
             },
             verified_numerical_facts=verified_facts,
