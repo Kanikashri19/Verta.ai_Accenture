@@ -27,3 +27,7 @@ node_modules/
 # Generated files
 dist/
 build/
+
+data/vector_store/
+
+data/vector_store/
