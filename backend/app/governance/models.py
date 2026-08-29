@@ -71,7 +71,10 @@ class ConfidenceAssessment(BaseModel):
     lineage_score: float
     contradiction_penalty: float
     lineage_complete: bool
+    conflict_summary: Optional[str] = None
+    conflicting_evidence_ids: List[str] = Field(default_factory=list)
     clarification_questions: List[str] = Field(default_factory=list)
+    formula_version: str = "1.1.0"
     evaluated_at: str
 
 class GovernanceDecision(BaseModel):
@@ -105,3 +108,4 @@ class AuditRecord(BaseModel):
     decision: str
     reason_codes: List[str]
     clarification_count: int
+    assessment_latency_ms: float = 0.0

@@ -8,6 +8,11 @@ from app.engine.investigation import investigation_engine
 from app.data.loader import data_loader
 from app.evidence.service import evidence_service
 from app.governance.service import governance_service
+from app.narrative.service import narrative_service
+from app.narrative.models import Persona, NarrativeRequest, ActionRecommendationRequest
+from app.narrative.action_catalog import action_catalog_engine
+from app.narrative.gateway import llm_gateway
+from app.narrative.cache import narrative_cache
 
 app = FastAPI(
     title="Verta.ai — KPI Intelligence-to-Action API",
@@ -239,3 +244,80 @@ def get_governance_assessments(limit: int = Query(50, ge=1, le=200)) -> List[Dic
     """
     records = governance_service.get_audit_history(limit=limit)
     return [r.model_dump() for r in records]
+
+# ==========================================
+# PHASE 6: GOVERNED NARRATIVE & ACTIONS ROUTES
+# ==========================================
+
+@app.post("/api/narrative/generate/{kpi_id}")
+def generate_narrative(
+    kpi_id: str,
+    scenario_id: str = Query("SCENARIO_1_MULTI_FACTOR"),
+    persona: str = Query("EXECUTIVE", description="EXECUTIVE or ANALYST"),
+    role: str = Query("ANALYST", description="RBAC role: EXECUTIVE, ANALYST, OPERATIONS"),
+    force_refresh: bool = Query(False, description="Bypass cache"),
+) -> Dict[str, Any]:
+    """
+    Synthesizes a governed, persona-specific KPI narrative with traceable evidence citations,
+    uncertainty caveats, and approved action recommendations. Strictly respects Phase 5 governance.
+    """
+    try:
+        p_enum = Persona(persona.upper())
+        resp = narrative_service.assess_and_generate_narrative(
+            kpi_id=kpi_id,
+            scenario_id=scenario_id,
+            persona=p_enum,
+            user_role=role,
+            force_refresh=force_refresh,
+        )
+        return resp.model_dump()
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/narrative/status")
+def get_narrative_status() -> Dict[str, Any]:
+    """
+    Returns status of LLM provider abstraction, active model, pricing, and cache size.
+    """
+    return {
+        "status": "active",
+        "provider": llm_gateway.provider,
+        "model": llm_gateway.model,
+        "temperature": llm_gateway.temperature,
+        "max_tokens": llm_gateway.max_tokens,
+        "timeout_seconds": llm_gateway.timeout_seconds,
+        "pricing": {
+            "input_cost_per_1k": llm_gateway.input_cost_per_1k,
+            "output_cost_per_1k": llm_gateway.output_cost_per_1k,
+        },
+        "cache_size": narrative_cache.size,
+    }
+
+@app.get("/api/narrative/telemetry")
+def get_narrative_telemetry() -> List[Dict[str, Any]]:
+    """
+    Returns telemetry logs for recent narrative synthesis calls (latencies, token counts, costs).
+    """
+    return narrative_service.get_telemetry()
+
+@app.post("/api/actions/recommend/{kpi_id}")
+def recommend_actions(
+    kpi_id: str,
+    scenario_id: str = Query("SCENARIO_1_MULTI_FACTOR"),
+    role: str = Query("ANALYST", description="RBAC role: EXECUTIVE, ANALYST, OPERATIONS"),
+) -> List[Dict[str, Any]]:
+    """
+    Returns approved, actionable recommendations from the deterministic catalog matched to the KPI's verified drivers.
+    """
+    try:
+        factpack = investigation_engine.get_factpack(kpi_id, scenario_id)
+        evidence_pack = evidence_service.get_evidence_for_factpack(factpack, user_role=role)
+        assessment, _ = governance_service.assess_kpi(kpi_id=kpi_id, scenario_id=scenario_id, user_role=role)
+        actions = action_catalog_engine.select_actions(factpack, evidence_pack, assessment)
+        return [a.model_dump() for a in actions]
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

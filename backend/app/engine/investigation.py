@@ -333,4 +333,15 @@ class InvestigationEngine:
             ]
         )
 
+    def get_factpack(
+        self,
+        kpi_id: str,
+        scenario_id: str = "SCENARIO_1_MULTI_FACTOR"
+    ) -> FactPack:
+        """
+        Convenience method to run investigation and generate the verified FactPack.
+        """
+        res = self.investigate_kpi(kpi_id=kpi_id, scenario_id=scenario_id)
+        return self.generate_fact_pack(res)
+
 investigation_engine = InvestigationEngine()

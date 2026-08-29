@@ -70,3 +70,30 @@ class TestAbstentionAndCircuitBreaker:
             assert isinstance(q, str)
             assert len(q) > 20
             assert "?" in q
+
+    def test_abstention_explains_conflict(self):
+        """Abstention on contradiction must explain what conflicts and why a single explanation is unsafe."""
+        evidence_service.ingest_scenario_evidence("SCENARIO_5_CONTRADICTORY_EVIDENCE")
+        assessment, decision = governance_service.assess_kpi(
+            kpi_id="kpi_gross_margin",
+            scenario_id="SCENARIO_5_CONTRADICTORY_EVIDENCE",
+            user_role="ANALYST",
+        )
+        if decision.decision == GovernanceDecisionEnum.ABSTAIN:
+            assert assessment.conflict_summary is not None
+            assert "cannot safely" in assessment.conflict_summary.lower() or "conflict" in assessment.conflict_summary.lower()
+            assert "CONTRADICTORY_EVIDENCE" in decision.reason_codes
+            assert "GENERATE_EXECUTIVE_CLAIM" in decision.blocked_actions
+
+    def test_audit_trail_includes_hashes_and_latency(self):
+        """Audit records capture hashes, formula version, and assessment latency."""
+        _, decision = governance_service.assess_kpi("kpi_revenue", "SCENARIO_1_MULTI_FACTOR", user_role="ANALYST")
+        history = governance_service.get_audit_history(limit=5)
+        latest = history[-1]
+        assert latest.input_factpack_hash
+        assert latest.input_evidencepack_hash
+        assert latest.formula_version
+        assert latest.policy_version
+        assert latest.assessment_latency_ms >= 0.0
+        assert decision.audit_metadata.get("llm_override_allowed") is False
+

@@ -14,8 +14,8 @@ class GovernanceCircuitBreaker:
     cannot bypass or override these deterministic constraints.
     """
 
-    POLICY_VERSION = "1.0.0"
-    FORMULA_VERSION = "1.0.0"
+    POLICY_VERSION = "1.1.0"
+    FORMULA_VERSION = "1.1.0"
 
     # Action permission matrices
     PERMISSIONS = {
@@ -62,6 +62,7 @@ class GovernanceCircuitBreaker:
                 "GENERATE_ABSTENTION_NOTICE",
                 "FLAG_DATA_QUALITY_ALERT",
                 "REQUEST_MANUAL_REVIEW",
+                "REQUEST_ADDITIONAL_DATA",
                 "DISPLAY_RAW_METRICS"
             ],
             "blocked": [
@@ -82,7 +83,8 @@ class GovernanceCircuitBreaker:
         assessment: ConfidenceAssessment,
         user_role: str = "ANALYST",
         factpack_hash: str = "",
-        evidencepack_hash: str = ""
+        evidencepack_hash: str = "",
+        assessment_latency_ms: float = 0.0,
     ) -> GovernanceDecision:
         """
         Arbitrates the assessment into a binding GovernanceDecision and records an audit log.
@@ -116,8 +118,10 @@ class GovernanceCircuitBreaker:
             "user_role": user_role,
             "factpack_hash": factpack_hash,
             "evidencepack_hash": evidencepack_hash,
+            "assessment_latency_ms": assessment_latency_ms,
             "warnings_count": len(assessment.warnings),
             "clarifications_count": len(assessment.clarification_questions),
+            "llm_override_allowed": False,
         }
 
         gov_decision = GovernanceDecision(
@@ -146,7 +150,8 @@ class GovernanceCircuitBreaker:
             confidence_band=assessment.confidence_band.value,
             decision=decision.value,
             reason_codes=reason_codes,
-            clarification_count=len(assessment.clarification_questions)
+            clarification_count=len(assessment.clarification_questions),
+            assessment_latency_ms=round(assessment_latency_ms, 2),
         )
         self.audit_log.append(audit_record)
 

@@ -56,6 +56,16 @@ class TestGovernanceEngine:
         assert exec_assessment.overall_confidence >= 80.0
         assert analyst_assessment.overall_confidence >= 80.0
 
+    def test_executive_view_omits_restricted_detail(self):
+        """Executive persona must not receive evidence identifiers or analyst-grade justifications."""
+        exec_assessment, _ = governance_service.assess_kpi("kpi_revenue", "SCENARIO_1_MULTI_FACTOR", user_role="EXECUTIVE")
+        assert exec_assessment.conflicting_evidence_ids == []
+        if exec_assessment.driver_assessments:
+            assert all(
+                "Executive summary" in d.justification
+                for d in exec_assessment.driver_assessments.values()
+            )
+
     def test_ground_truth_independence(self):
         """Governance engine never accesses ground_truth sections of scenarios.yaml."""
         import inspect

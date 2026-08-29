@@ -126,8 +126,10 @@ class EvidenceService:
 
         # Query evidence for each primary driver in FactPack
         driver_queries = [d.driver_name for d in inv.ranked_drivers]
+        if not driver_queries and inv.ranked_explanations:
+            driver_queries = [e.driver for e in inv.ranked_explanations]
         if not driver_queries:
-            driver_queries = ["general"]
+            driver_queries = [kpi_id.replace("kpi_", "")]
 
         for d_name in driver_queries:
             d_pack = evidence_retriever.retrieve(

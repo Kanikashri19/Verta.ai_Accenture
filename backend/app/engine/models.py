@@ -112,7 +112,7 @@ class InvestigationResult(BaseModel):
     materiality: MaterialityAssessment
     anomaly_score: Optional[float] = None
     analytical_method: str
-    ranked_drivers: List[DriverContribution]
+    ranked_drivers: List[DriverContribution] = Field(default_factory=list)
     ranked_explanations: List[RankedExplanation] = Field(default_factory=list)
     mix_shift_analysis: Optional[MixShiftBreakdown] = None
     dimensional_drilldowns: Dict[str, List[DimensionalContribution]] = Field(default_factory=dict)
