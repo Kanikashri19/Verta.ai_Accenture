@@ -10,7 +10,7 @@ Verta.ai is a governed **KPI intelligence-to-action engine** that helps business
 
 **Architecture**
 
-```text
+
 Enterprise Data
       ↓
 KPI Semantic Layer
@@ -35,7 +35,7 @@ Persona-Specific Insight
       ↓
 Recommended Actions
 
-# Key Features
+**Key Features**
 1. KPI Intelligence
 2. Driver Analysis
 3. Evidence-Grounded RAG
@@ -45,28 +45,28 @@ Recommended Actions
 
 
 
-# Tech Stack
-# Frontend
+**Tech Stack**
+**Frontend**
 React
 Vite
-# Backend
+**Backend**
 Python 3.12
 FastAPI
 Uvicorn
 Pydantic
-# Analytics
+**Analytics**
 Pandas
 NumPy
 SciPy
-# RAG / AI
+**RAG / AI**
 ChromaDB
 FastEmbed
 LiteLLM / LLM SDKs
-# Configuration
+**Configuration**
 PyYAML
-# Testing
+**Testing**
 Pytest
-# Version Control & Deployment
+**Version Control & Deployment**
 Git
 GitHub
 Vercel
