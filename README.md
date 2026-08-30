@@ -47,29 +47,34 @@ Recommended Actions
 
 
 
-**Tech Stack**
-**Frontend**
-React
-Vite
-**Backend**
-Python 3.12
-FastAPI
-Uvicorn
-Pydantic
-**Analytics**
-Pandas
-NumPy
-SciPy
-**RAG / AI**
-ChromaDB
-FastEmbed
-LiteLLM / LLM SDKs
-**Configuration**
-PyYAML
-**Testing**
-Pytest
-**Version Control & Deployment**
-Git
-GitHub
-Vercel
-Render
+### Frontend
+- React
+- Vite
+
+### Backend
+- Python 3.12
+- FastAPI
+- Uvicorn
+- Pydantic
+
+### Analytics
+- Pandas
+- NumPy
+- SciPy
+
+### RAG / AI
+- ChromaDB
+- FastEmbed
+- LiteLLM / LLM SDKs
+
+### Configuration
+- PyYAML
+
+### Testing
+- Pytest
+
+### Version Control & Deployment
+- Git
+- GitHub
+- Vercel
+- Render
