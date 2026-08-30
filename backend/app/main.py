@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
+import uuid
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
 
 from app.core.config import config
 from app.engine.semantic import semantic_layer
@@ -302,6 +305,46 @@ def get_narrative_telemetry() -> List[Dict[str, Any]]:
     """
     return narrative_service.get_telemetry()
 
+@app.get("/api/kpi/overview")
+def get_kpi_overview(scenario_id: str = Query("SCENARIO_1_MULTI_FACTOR")) -> Dict[str, Any]:
+    """
+    Returns an executive overview of all standard KPIs for the given scenario,
+    including current value, baseline value, absolute change, percentage change,
+    materiality score, statistical significance, and priority ranking.
+    """
+    results = []
+    kpi_ids = list(semantic_layer.contracts.keys())
+    for kid in kpi_ids:
+        try:
+            inv = investigation_engine.investigate_kpi(kid, scenario_id=scenario_id)
+            results.append({
+                "kpi_id": kid,
+                "name": inv.kpi_name,
+                "current_value": round(inv.current_value, 2),
+                "baseline_value": round(inv.baseline_value, 2),
+                "absolute_change": round(inv.absolute_change, 2),
+                "percentage_change": round(inv.percentage_change, 2),
+                "unit": inv.unit,
+                "business_materiality": inv.materiality.business_materiality,
+                "overall_materiality": inv.materiality.overall_materiality,
+                "statistical_significance": inv.materiality.statistical_significance,
+                "is_material": inv.materiality.business_materiality == "MATERIAL",
+                "is_statistically_significant": inv.materiality.statistical_significance == "STATISTICALLY_SIGNIFICANT",
+                "anomaly_score": round(inv.anomaly_score, 2) if inv.anomaly_score is not None else None,
+                "direction": "down" if inv.percentage_change < 0 else "up"
+            })
+        except Exception as e:
+            import traceback
+            print(f"Error investigating KPI {kid}: {e}")
+            traceback.print_exc()
+    
+    # Sort with highest absolute percentage change first for visual prioritization
+    results.sort(key=lambda x: abs(x["percentage_change"]), reverse=True)
+    return {
+        "scenario_id": scenario_id,
+        "kpis": results
+    }
+
 @app.post("/api/actions/recommend/{kpi_id}")
 def recommend_actions(
     kpi_id: str,
@@ -321,3 +364,46 @@ def recommend_actions(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# PHASE 7: FEEDBACK LOOP ROUTES
+# ==========================================
+
+class FeedbackSubmission(BaseModel):
+    request_id: Optional[str] = None
+    kpi_id: str
+    scenario_id: Optional[str] = None
+    persona: str = "EXECUTIVE"
+    user_role: str = "ANALYST"
+    rating: str  # "CORRECT", "PARTIALLY_CORRECT", "INCORRECT"
+    feedback_text: Optional[str] = None
+    corrected_driver: Optional[str] = None
+
+_feedback_storage: List[Dict[str, Any]] = []
+
+@app.post("/api/feedback/submit")
+def submit_feedback(payload: FeedbackSubmission) -> Dict[str, Any]:
+    record = {
+        "feedback_id": f"FB-{uuid.uuid4().hex[:8]}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "request_id": payload.request_id,
+        "kpi_id": payload.kpi_id,
+        "scenario_id": payload.scenario_id,
+        "persona": payload.persona,
+        "user_role": payload.user_role,
+        "rating": payload.rating,
+        "feedback_text": payload.feedback_text,
+        "corrected_driver": payload.corrected_driver,
+        "status": "STORED_FOR_EVALUATION"
+    }
+    _feedback_storage.append(record)
+    return {
+        "status": "success",
+        "message": "Feedback captured and stored for evaluation.",
+        "record": record
+    }
+
+@app.get("/api/feedback/list")
+def list_feedback(limit: int = 50) -> List[Dict[str, Any]]:
+    return _feedback_storage[-limit:]
+
