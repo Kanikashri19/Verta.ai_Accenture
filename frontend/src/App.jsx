@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
+import PipelineFlowBar from './components/PipelineFlowBar';
+import TabBar from './components/TabBar';
+
 import KPIOverviewGrid from './components/KPIOverviewGrid';
 import InvestigationView from './components/InvestigationView';
 import GovernancePanel from './components/GovernancePanel';
@@ -22,10 +25,12 @@ import {
 } from './services/api';
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'investigation' | 'narrative' | 'governance' | 'actions' | 'architecture' | 'feedback'
   const [scenarioId, setScenarioId] = useState('SCENARIO_1_MULTI_FACTOR');
   const [persona, setPersona] = useState('EXECUTIVE');
   const [userRole, setUserRole] = useState('ANALYST');
   const [selectedKpiId, setSelectedKpiId] = useState('kpi_revenue');
+  const [focusedDriver, setFocusedDriver] = useState(null);
 
   const [kpis, setKpis] = useState([]);
   const [investigation, setInvestigation] = useState(null);
@@ -49,7 +54,6 @@ export default function App() {
       const data = await fetchKPIOverview(scenId);
       const list = data.kpis || [];
       setKpis(list);
-      // If selected KPI not in list, pick the first one
       if (list.length > 0 && !list.some((k) => k.kpi_id === selectedKpiId)) {
         setSelectedKpiId(list[0].kpi_id);
       }
@@ -66,7 +70,6 @@ export default function App() {
     setLoadingInvestigation(true);
     setError(null);
     try {
-      // Parallel fetch of core deterministic investigation and governance
       const [invRes, govRes, evidRes, narrRes] = await Promise.all([
         fetchKPIInvestigation(kpiId, scenId),
         fetchGovernanceAssessment(kpiId, scenId, role),
@@ -80,7 +83,6 @@ export default function App() {
       setNarrativeData(narrRes);
       setActions(narrRes.recommended_actions || []);
 
-      // Fetch telemetry and status
       const [statusRes, telemRes] = await Promise.all([
         fetchNarrativeStatus().catch(() => null),
         fetchNarrativeTelemetry().catch(() => []),
@@ -113,13 +115,26 @@ export default function App() {
     loadDeepDive(selectedKpiId, scenarioId, persona, userRole, true);
   };
 
+  // When a user selects a KPI from Overview
+  const handleSelectKpi = (kpiId) => {
+    setSelectedKpiId(kpiId);
+    setFocusedDriver(null); // Reset driver focus on KPI change
+  };
+
+  const selectedKpiObj = kpis.find((k) => k.kpi_id === selectedKpiId) || kpis[0] || {};
+  const currentConfidence = governanceData?.assessment?.confidence_score ?? narrativeData?.telemetry?.prompt_tokens ?? 93.7;
+  const currentDecision = narrativeData?.governance_decision || governanceData?.decision?.decision || 'PROCEED';
+
   return (
     <div style={{ minHeight: '100vh', padding: '24px 20px', maxWidth: '1440px', margin: '0 auto' }}>
       
       {/* Global Header & Scenario Controls */}
       <Header
         scenarioId={scenarioId}
-        onScenarioChange={setScenarioId}
+        onScenarioChange={(newScen) => {
+          setScenarioId(newScen);
+          setFocusedDriver(null);
+        }}
         persona={persona}
         onPersonaChange={setPersona}
         userRole={userRole}
@@ -129,78 +144,127 @@ export default function App() {
         onOpenTelemetry={() => setIsTelemetryOpen(true)}
       />
 
-      {/* Security & RBAC Overlay (Screen 7) */}
-      <SecurityRBACOverlay userRole={userRole} />
+      {/* Decision Intelligence Pipeline Stepper Bar */}
+      <PipelineFlowBar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        selectedKpiName={selectedKpiObj.name || selectedKpiId}
+        selectedKpiDelta={selectedKpiObj.percentage_change || investigation?.percentage_change || 0}
+        focusedDriver={focusedDriver}
+        governanceDecision={currentDecision}
+        confidenceScore={currentConfidence}
+      />
+
+      {/* Tab Navigation */}
+      <TabBar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       {/* Global Error Banner */}
       {error && (
-        <div style={{ padding: '14px 20px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '10px', color: '#fca5a5', marginBottom: '20px', fontSize: '0.85rem' }}>
+        <div style={{ padding: '14px 20px', background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: '10px', color: '#b91c1c', marginBottom: '20px', fontSize: '0.85rem' }}>
           <strong>Error:</strong> {error}
         </div>
       )}
 
-      {/* Screen 1: Executive KPI Overview Grid */}
-      <KPIOverviewGrid
-        kpis={kpis}
-        selectedKpiId={selectedKpiId}
-        onSelectKpi={setSelectedKpiId}
-        loading={loadingOverview}
-      />
-
-      {/* Main Investigation & Intelligence Flow */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
-        
-        {/* Screen 4 & 6: Governance & Confidence Panel */}
-        <GovernancePanel
-          governanceData={governanceData}
-          narrativeData={narrativeData}
-          loading={loadingInvestigation}
+      {/* STEP 1: DETECT — OVERVIEW */}
+      {activeTab === 'overview' && (
+        <KPIOverviewGrid
+          kpis={kpis}
+          selectedKpiId={selectedKpiId}
+          onSelectKpi={handleSelectKpi}
+          onProceedToInvestigation={() => setActiveTab('investigation')}
+          loading={loadingOverview}
         />
+      )}
 
-        {/* Screen 3: Persona-Specific Governed Narrative */}
-        <PersonaNarrativeCard
-          narrativeData={narrativeData}
-          persona={persona}
-          loading={loadingInvestigation}
-        />
-
-        {/* Screen 2: Detailed KPI Investigation, Decomposition & Traceable Evidence */}
+      {/* STEP 2: CORRELATE — INVESTIGATION & DECOMPOSITION */}
+      {activeTab === 'investigation' && (
         <InvestigationView
           investigation={investigation}
           evidencePack={evidencePack}
           persona={persona}
           userRole={userRole}
+          focusedDriver={focusedDriver}
+          onSelectDriver={setFocusedDriver}
+          onBackToOverview={() => setActiveTab('overview')}
+          onProceedToNarrative={() => setActiveTab('narrative')}
           loading={loadingInvestigation}
         />
+      )}
 
-        {/* Screen 5: Approved Action Recommendations */}
+      {/* STEP 3: EXPLAIN — PERSONA NARRATIVES */}
+      {activeTab === 'narrative' && (
+        <PersonaNarrativeCard
+          narrativeData={narrativeData}
+          persona={persona}
+          userRole={userRole}
+          focusedDriver={focusedDriver}
+          onBackToInvestigation={() => setActiveTab('investigation')}
+          onProceedToGovernance={() => setActiveTab('governance')}
+          loading={loadingInvestigation}
+        />
+      )}
+
+      {/* STEP 4: VALIDATE — GOVERNANCE & CONFIDENCE */}
+      {activeTab === 'governance' && (
+        <GovernancePanel
+          governanceData={governanceData}
+          narrativeData={narrativeData}
+          userRole={userRole}
+          focusedDriver={focusedDriver}
+          onBackToNarrative={() => setActiveTab('narrative')}
+          onProceedToActions={() => setActiveTab('actions')}
+          loading={loadingInvestigation}
+        />
+      )}
+
+      {/* STEP 5: RECOMMEND — ACTION RECOMMENDATIONS */}
+      {activeTab === 'actions' && (
         <ActionRecommendations
           actions={actions}
-          governanceDecision={narrativeData?.governance_decision || governanceData?.decision?.decision}
+          governanceDecision={currentDecision}
+          userRole={userRole}
+          focusedDriver={focusedDriver}
+          onBackToGovernance={() => setActiveTab('governance')}
+          onProceedToFeedback={() => setActiveTab('feedback')}
           loading={loadingInvestigation}
         />
+      )}
 
-        {/* Screen 8: Non-LLM vs Governed LLM Architecture Matrix */}
-        <EngineArchitectureCard
-          generationMode={narrativeData?.generation_mode}
-          llmStatus={llmStatus}
-        />
-
-        {/* Screen 10: Analyst Feedback Loop */}
+      {/* STEP 6: CALIBRATE — ANALYST FEEDBACK */}
+      {activeTab === 'feedback' && (
         <AnalystFeedbackModal
           kpiId={selectedKpiId}
           scenarioId={scenarioId}
           persona={persona}
           userRole={userRole}
           requestId={narrativeData?.telemetry?.request_id}
+          focusedDriver={focusedDriver}
+          onBackToActions={() => setActiveTab('actions')}
+          onStartNewInvestigation={() => {
+            setActiveTab('overview');
+            setFocusedDriver(null);
+          }}
           onFeedbackSubmitted={() => {
             fetchNarrativeTelemetry().then((t) => setTelemetryHistory(t || []));
           }}
         />
+      )}
 
-      </div>
+      {/* ARCHITECTURE & SECURITY */}
+      {activeTab === 'architecture' && (
+        <div>
+          <SecurityRBACOverlay userRole={userRole} />
+          <EngineArchitectureCard
+            generationMode={narrativeData?.generation_mode}
+            llmStatus={llmStatus}
+          />
+        </div>
+      )}
 
-      {/* Screen 9: Real-Time Telemetry Slide-Out Drawer */}
+      {/* Real-Time Telemetry Slide-Out Drawer (Screen 9) */}
       <TelemetryDrawer
         isOpen={isTelemetryOpen}
         onClose={() => setIsTelemetryOpen(false)}
@@ -211,7 +275,7 @@ export default function App() {
 
       {/* Footer */}
       <footer style={{ marginTop: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-        Verta.ai Decision Intelligence Platform • Accenture Innovation Challenge 2026 Round 2
+        Verta.ai Decision Intelligence Platform
       </footer>
 
     </div>

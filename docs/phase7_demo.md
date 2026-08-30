@@ -10,15 +10,14 @@ The Phase 7 dashboard delivers a high-impact, enterprise-grade user interface bu
 ```
 +-----------------------------------------------------------------------------------------+
 |                                    REACT + VITE DASHBOARD                               |
-|   - Screen 1: Executive KPI Overview Grid & Anomaly Prioritisation                      |
-|   - Screen 2: Detailed KPI Investigation, Decomposition & Traceable Evidence            |
-|   - Screen 3: Governed Persona Narrative (Executive vs Analyst Views)                   |
-|   - Screen 4 & 6: Calibrated Confidence Gauge & Governance Circuit Breaker              |
-|   - Screen 5: 8-Point Accenture Action Recommendation Pipeline                          |
-|   - Screen 7: Enterprise Security & RBAC Guardrails ([MASKED_PII] & Role Filtering)     |
-|   - Screen 8: Non-LLM vs LLM Architectural Matrix ("How Verta.ai Thinks")               |
-|   - Screen 9: Observability & Real-Time Telemetry Slide-Out Drawer                      |
-|   - Screen 10: Analyst Feedback & Continuous Calibration Loop                           |
+|   - [Overview]       Screen 1: Executive KPI Overview Grid & Anomaly Prioritisation     |
+|   - [Investigation]  Screen 2: Detailed KPI Investigation, Decomposition & Evidence     |
+|   - [Narrative]      Screen 3: Governed Persona Narrative (Executive vs Analyst Views)   |
+|   - [Governance]     Screen 4 & 6: Calibrated Confidence & Governance Circuit Breaker   |
+|   - [Actions]        Screen 5: 8-Point Accenture Action Recommendation Pipeline         |
+|   - [Architecture]   Screen 7 & 8: Security RBAC Guardrails & Non-LLM Architecture      |
+|   - [Feedback]       Screen 10: Analyst Feedback & Continuous Calibration Loop          |
+|   - [Telemetry]      Screen 9: Observability & Real-Time Telemetry Slide-Out Drawer     |
 +-----------------------------------------------------------------------------------------+
                                            │
                                    HTTP / REST (JSON)
@@ -34,7 +33,17 @@ The Phase 7 dashboard delivers a high-impact, enterprise-grade user interface bu
 
 ---
 
-## 2. Screen-by-Screen Feature Mapping
+## 2. Clean Tab-by-Tab Navigation Structure
+
+The dashboard is structured into 7 distinct focused tabs:
+
+1. **Overview** (Screen 1): 5 KPI cards with baseline vs anomaly comparisons, percentage changes, and priority highlight ribbon.
+2. **Investigation** (Screen 2): Quantitative multiplicative driver decomposition, Logarithmic Bennet mix-shift, traceable ChromaDB operational evidence cards (`[EVID-...]`), and end-to-end data lineage flow.
+3. **Narrative** (Screen 3): Governed persona-specific narratives (Executive vs Analyst views), grounded evidence citations, and uncertainty caveats.
+4. **Governance** (Screen 4 & 6): Calibrated confidence gauge ($X/100$), sub-score breakdown, circuit breaker decision badges (`PROCEED` / `ABSTAIN` / `REQUEST_CLARIFICATION`), conflict summary, and clarification prompts.
+5. **Actions** (Screen 5): 8-Point Accenture action recommendation pipeline with authorized business owner tags and blocked state when abstaining.
+6. **Architecture & Security** (Screen 7 & 8): Enterprise RBAC role enforcement, PII masking guardrails, and the Non-LLM Ground Truth vs LLM Translation matrix.
+7. **Feedback** (Screen 10): Domain analyst feedback collector (`Correct`, `Partially Correct`, `Incorrect`) persisting records into the evaluation registry (`FB-...`).
 
 ### Screen 1 — Executive KPI Overview & Prioritisation
 - **Header**: `Verta.ai | KPI Intelligence → Action`
