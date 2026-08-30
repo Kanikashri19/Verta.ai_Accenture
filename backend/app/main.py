@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
@@ -23,13 +24,45 @@ app = FastAPI(
     version=config.version,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# Production CORS Configuration (Supports Vercel URL and custom domain)
+cors_env = os.environ.get("CORS_ORIGINS") or os.environ.get("ALLOWED_ORIGINS") or os.environ.get("FRONTEND_URL")
+if cors_env and cors_env.strip() != "*":
+    cors_origins = [orig.strip() for orig in cors_env.split(",") if orig.strip()]
+    for local_origin in ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"]:
+        if local_origin not in cors_origins:
+            cors_origins.append(local_origin)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+@app.get("/")
+def root_check() -> Dict[str, str]:
+    return {
+        "status": "healthy",
+        "app": config.app_name,
+        "version": config.version,
+        "docs_url": "/docs",
+    }
+
+@app.get("/health")
+def health_check_root() -> Dict[str, str]:
+    return {
+        "status": "healthy",
+        "app": config.app_name,
+        "version": config.version,
+    }
 
 @app.get("/api/health")
 def health_check() -> Dict[str, str]:

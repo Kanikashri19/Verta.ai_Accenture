@@ -1,0 +1,15 @@
+﻿services:
+  - type: web
+    name: verta-ai-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn --app-dir backend app.main:app --host 0.0.0.0 --port 
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: VERTA_ENVIRONMENT
+        value: production
+      - key: LLM_PROVIDER
+        value: mock

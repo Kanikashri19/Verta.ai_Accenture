@@ -6,7 +6,14 @@ import {
   FALLBACK_NARRATIVE,
 } from './fallbackData';
 
-const API_BASE = '/api';
+// Dynamic API URL configurable for Vercel / Production deployment
+const rawApiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '').trim();
+const getApiBase = () => {
+  if (!rawApiUrl) return '/api';
+  const cleanUrl = rawApiUrl.replace(/\/+$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+const API_BASE = getApiBase();
 
 async function safeFetch(url, options = {}) {
   try {
