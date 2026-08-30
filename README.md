@@ -10,7 +10,7 @@ Verta.ai is a governed **KPI intelligence-to-action engine** that helps business
 
 **Architecture**
 
-
+```text
 Enterprise Data
       ↓
 KPI Semantic Layer
@@ -34,6 +34,8 @@ LLM          Human Review
 Persona-Specific Insight
       ↓
 Recommended Actions
+
+```
 
 **Key Features**
 1. KPI Intelligence
